@@ -24,14 +24,18 @@ import java.net.URI
     val completion by rememberUpdatedState(completed)
     val handler = remember { Handler(Looper.getMainLooper()) }
     Dialog(onDismissRequest = cancelled, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxWidth().padding(16.dp), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.padding(20.dp)) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text("安全验证", style = MaterialTheme.typography.titleLarge)
                 Text("请完成米游社要求的验证，完成后将继续登录。", Modifier.padding(top = 8.dp, bottom = 16.dp), style = MaterialTheme.typography.bodyMedium)
                 key(challenge, revision) {
-                    AndroidView(modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 440.dp), factory = { context ->
+                    AndroidView(modifier = Modifier.fillMaxWidth().weight(1f), factory = { context ->
                         WebView(context).apply {
+                            layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                             settings.javaScriptEnabled = true
+                            settings.useWideViewPort = true
+                            settings.loadWithOverviewMode = false
+                            settings.textZoom = 100
                             settings.allowFileAccess = false
                             settings.allowContentAccess = false
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -85,11 +89,13 @@ internal fun verificationHtml(challenge: LoginChallenge): String {
     val initialize = if (challenge.version == 4) "initGeetest4" else "initGeetest"
     return """<!doctype html><html lang="zh-CN"><head>
         <meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>body{margin:0;font:16px sans-serif;background:#fff;color:#263648}#captcha{padding:16px 0;text-align:center}#loading{padding:20px;text-align:center}</style>
+        <style>html,body{width:100%;height:100%;margin:0}body{font:16px sans-serif;background:#fff;color:#263648;display:flex;align-items:center;justify-content:center}#captcha{width:100%;text-align:center}#loading{position:absolute;top:24px;width:100%;text-align:center}</style>
         </head><body><div id="loading" role="status">正在加载验证…</div><div id="captcha"></div>
         <script src="$script" onerror="YunjianVerification.error()"></script><script>
         try {
-          $initialize(${challenge.options},function(captcha){
+          var options=${challenge.options};
+          if(${challenge.version}===4){options.rem=1;options.nextWidth=Math.min(360,window.innerWidth-24)+'px';options.nativeButton={width:'100%',height:'50px'};}
+          $initialize(options,function(captcha){
             captcha.appendTo('#captcha');
             captcha.onReady(function(){document.getElementById('loading').style.display='none';});
             captcha.onSuccess(function(){var result=captcha.getValidate();if(result)YunjianVerification.complete(JSON.stringify(result));});

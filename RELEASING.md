@@ -27,6 +27,8 @@ GitHub Actions Repository Secrets：
 
 不要在 Issues、日志或 Release 附件中粘贴上述内容。正式构建缺少签名或仍为开发版本名时会停止。
 
+签名 Secrets 配置完成后，将 Repository Variable `CI_RELEASE_ENABLED` 设为 `true`，才会在推送标签时自动准备签名包。未启用时仍执行隐私检查，可由维护者在本机签名并上传；本机发布不需要把私钥上传到 GitHub。手动运行发布工作流会主动尝试读取签名 Secrets。
+
 ## 构建发布附件
 
 ```sh
@@ -36,6 +38,6 @@ node tools/package-release.mjs
 
 确保版本号适合本次发布。`artifacts/release/` 生成一个通用 APK、`update.json` 和 `SHA256SUMS`，三者应放入同一 Release；不要手工编辑清单。用 Android SDK 的 `apksigner verify` 检查最终签名。
 
-推送稳定版本标签会触发 `Prepare Android release`；也可以手动选择一个已存在的标签。工作流测试、签名并校验后仅创建草稿，拒绝覆盖公开 Release。检查附件和说明后再发布。发布前必须确认内部版本号高于上次公开版本。
+启用 `CI_RELEASE_ENABLED` 后，推送稳定版本标签会触发 `Prepare Android release` 的签名步骤；也可以手动选择一个已存在的标签。工作流测试、签名并校验后仅创建草稿，拒绝覆盖公开 Release。检查附件和说明后再发布。发布前必须确认内部版本号高于上次公开版本。
 
 首次正式发布前应验证实际 Release 下载和系统确认安装链路。客户端会核对 SHA-256、长度、包名、版本、系统兼容性和证书，不静默安装；签名不同会阻止覆盖。浏览器发行页作为网络受限时的备用入口。

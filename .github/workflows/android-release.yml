@@ -18,6 +18,7 @@ jobs:
     uses: ./.github/workflows/privacy.yml
   prepare:
     needs: privacy
+    if: github.event_name == 'workflow_dispatch' || vars.CI_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -24,10 +24,10 @@ data class AppState(val loggedIn: Boolean = false, val chats: List<Chat> = empty
                     val active: Chat? = null, val messages: List<Message> = emptyList(),
                     val busy: Boolean = false, val error: String? = null, val endReached: Boolean = false,
                     val qrBitmap: Bitmap? = null, val qrUrl: String = "", val loginStatus: String = "",
-                    val actionType: String = "", val syncEnabled: Boolean = false,
+                    val sms: SmsLoginState = SmsLoginState(), val syncEnabled: Boolean = false,
                     val emoticons: List<Emoticon> = emptyList(), val customEmoticons: List<Emoticon> = emptyList(),
                     val customLoading: Boolean = false, val customError: String? = null,
-                    val favorites: List<FavoriteGroup> = emptyList(), val smsCooldown: Int = 0,
+                    val favorites: List<FavoriteGroup> = emptyList(),
                     val accountId: String = "", val accounts: List<AccountSummary> = emptyList(), val authExpired: Boolean = false,
                     val profilesLoading: Boolean = false, val profilesError: String? = null,
                     val history: HistoryState = HistoryState(), val archive: ArchiveState = ArchiveState(), val focusMessage: String? = null,
@@ -50,8 +50,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var customJob: Job? = null
     private var profileJob: Job? = null
     private var pendingArchive: Triple<HistoryFilter,Boolean,String>? = null
+    val smsLogin = SmsLogin(viewModelScope,
+        send = { phone, aigis -> repository.api.sms(phone, repository.store.deviceId, aigis) },
+        login = { phone, code, action, aigis -> repository.api.loginSms(phone, code, action, repository.store.deviceId, aigis) },
+        signedIn = { session ->
+            operationMutex.withLock {
+                repository.signIn(session); qrJob?.cancel()
+                mutable.update { it.copy(authExpired = false) }
+                loadLocal(); setVisible(true); loadEmoticons(); refreshAccountProfiles()
+            }
+        })
     val accountId: String get() = repository.session()?.aid.orEmpty()
     init {
+        viewModelScope.launch { smsLogin.state.collect { sms -> mutable.update { it.copy(sms = sms) } } }
         viewModelScope.launch { repository.revision.collect { loadLocal() } }
         if (repository.session() != null) loadEmoticons()
         refreshAccountProfiles()
@@ -225,6 +236,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private suspend fun stopAccountWork() {
+        smsLogin.reset()
         pendingArchive = null
         qrJob?.cancelAndJoin(); pollJob?.cancelAndJoin(); historyJob?.cancelAndJoin(); archiveJob?.cancelAndJoin(); searchJob?.cancelAndJoin(); customJob?.cancelAndJoin()
     }
@@ -361,6 +373,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun cancelImage(message: Message) = work { repository.cancelImage(message) }
     fun createQr() {
+        smsLogin.reset()
         qrJob?.cancel()
         qrJob = viewModelScope.launch {
             mutable.update { it.copy(busy = true, error = null, loginStatus = "正在创建二维码") }
@@ -390,17 +403,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             finally { mutable.update { it.copy(busy = false) } }
         }
     }
-    fun requestSms(phone: String) = work {
-        require(phone.matches(Regex("1[3-9][0-9]{9}")))
-        if (mutable.value.smsCooldown > 0) return@work
-        val action = repository.api.sms(phone, repository.store.deviceId)
-        mutable.update { it.copy(actionType = action, loginStatus = "验证码已发送，请在手机查看", smsCooldown = 60) }
-        viewModelScope.launch { repeat(60) { delay(1000); mutable.update { it.copy(smsCooldown = (it.smsCooldown - 1).coerceAtLeast(0)) } } }
-    }
-    fun loginSms(phone: String, code: String) = work {
-        val session = repository.api.loginSms(phone, code, mutable.value.actionType, repository.store.deviceId)
-        repository.signIn(session); qrJob?.cancel(); mutable.update { it.copy(authExpired = false) }; loadLocal(); setVisible(true); loadEmoticons(); refreshAccountProfiles()
-    }
+    fun requestSms(phone: String) { qrJob?.cancel(); smsLogin.request(phone) }
+    fun loginSms(phone: String, code: String) { qrJob?.cancel(); smsLogin.submit(phone, code) }
     fun loggedOut(clear: Boolean) = work {
         stopAccountWork()
         if (clear && accountId.isNotBlank()) withContext(Dispatchers.IO) { backgroundStore.clear(accountId) }

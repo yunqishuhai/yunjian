@@ -48,6 +48,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -167,7 +170,12 @@ import java.util.Locale
 @Composable private fun LoginScreen(state: AppState, model: ChatViewModel, accounts: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var phone by rememberSaveable { mutableStateOf("") }
-    var code by rememberSaveable { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(state.sms.challenge) { if (state.sms.challenge != null) keyboard?.hide() }
+    state.sms.challenge?.let { challenge ->
+        LoginVerification(challenge, { model.smsLogin.verified(challenge, it) }, { model.smsLogin.verificationFailed(challenge) })
+    }
     val context = LocalContext.current
     val saveQr = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
         if (uri != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { state.qrBitmap?.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
@@ -178,20 +186,23 @@ import java.util.Locale
         Text("登录米游社，继续你的对话", Modifier.padding(top = 8.dp, bottom = 28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         TabRow(tab, containerColor = Color.Transparent) {
             Tab(tab == 0, onClick = { tab = 0 }, text = { Text("短信登录") })
-            Tab(tab == 1, onClick = { tab = 1 }, text = { Text("扫码登录") })
+            Tab(tab == 1, onClick = { model.smsLogin.reset(); code = ""; tab = 1 }, text = { Text("扫码登录") })
         }
         Spacer(Modifier.height(24.dp))
         if (tab == 0) {
-            OutlinedTextField(phone, { phone = it.filter(Char::isDigit).take(11) }, Modifier.fillMaxWidth(), label = { Text("手机号") }, prefix = { Text("+86  ") },
+            OutlinedTextField(phone, { phone = it.filter { c -> c in '0'..'9' }.take(11); code = ""; model.smsLogin.phoneChanged(phone) }, Modifier.fillMaxWidth(), label = { Text("手机号") }, prefix = { Text("+86  ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(code, { code = it.filter(Char::isDigit).take(8) }, Modifier.weight(1f), label = { Text("验证码") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), singleLine = true)
-                TextButton(onClick = { model.requestSms(phone) }, enabled = phone.length == 11 && !state.busy && state.smsCooldown == 0) { Text(if (state.smsCooldown > 0) "${state.smsCooldown}s" else "获取验证码") }
+                TextButton(onClick = { keyboard?.hide(); model.requestSms(phone) }, enabled = phone.length == 11 && !state.busy && !state.sms.busy && state.sms.cooldown == 0) { Text(if (state.sms.busy) "请求中…" else if (state.sms.cooldown > 0) "${state.sms.cooldown}s" else "获取验证码") }
             }
+            if (state.sms.status.isNotBlank()) Text(state.sms.status, Modifier.fillMaxWidth().padding(top = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                color = if (state.sms.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(24.dp))
-            Button(onClick = { model.loginSms(phone, code) }, enabled = code.length >= 4 && state.actionType.isNotBlank() && !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("登录米游社账号") }
-            Text("账号验证由米游社提供。遇到安全验证时，可尝试扫码登录。", Modifier.padding(top = 16.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = { keyboard?.hide(); model.loginSms(phone, code) }, enabled = code.length >= 4 && state.sms.canSubmit && !state.sms.busy && !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (state.sms.busy) "请稍候…" else "登录米游社账号") }
+            Text("账号验证由米游社提供。若提示安全验证，请按页面引导完成。", Modifier.padding(top = 16.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             state.qrBitmap?.let { bitmap ->
                 Image(bitmap.asImageBitmap(), "米游社登录二维码", Modifier.sizeIn(maxWidth = 280.dp, maxHeight = 280.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
@@ -203,7 +214,6 @@ import java.util.Locale
             } ?: Text("用已登录的米游社扫描二维码并在手机上确认。也可将二维码放到另一块屏幕上扫描。", Modifier.padding(bottom = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = model::createQr, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (state.qrBitmap == null) "生成登录二维码" else "刷新二维码") }
         }
-        if (state.loginStatus.isNotBlank() && tab == 0) Text(state.loginStatus, Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(32.dp)); Text("账号与聊天记录保存在这台设备上", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.accounts.isNotEmpty()) TextButton(onClick = accounts) { Text("选择已保存的账号") }
     }

@@ -23,7 +23,7 @@ import java.io.IOException
 
 class ApiFailure(val code: Int, val challenge: String? = null, serverMessage: String = "", operation: String = "") : Exception(when (code) {
     -100, 10001 -> "登录状态已失效，请重新登录"
-    1028, 1034 -> "需要完成官方安全验证"
+    -3101, 1028, 1034 -> "需要完成安全验证，请重试或使用扫码登录"
     -3501 -> "二维码已过期，请刷新"
     else -> (if (operation.isNotBlank()) "$operation：" else "") +
         serverMessage.filter { !it.isISOControl() }.trim().take(160).ifBlank { "请求未成功" } + "（$code）"
@@ -146,9 +146,9 @@ class MiyouApi : TemporaryImageApi {
         val key = KeyFactory.getInstance("RSA").generatePublic(RSAPublicKeySpec(modulus, BigInteger.valueOf(65537)))
         return Base64.encodeToString(Cipher.getInstance("RSA/ECB/PKCS1Padding").apply { init(Cipher.ENCRYPT_MODE, key) }.doFinal(value.toByteArray()), Base64.NO_WRAP)
     }
-    suspend fun sms(phone: String, deviceId: String, aigis: String = ""): String {
+    suspend fun sms(phone: String, deviceId: String, aigis: String = ""): SmsReceipt {
         val body = JSONObject().put("area_code", rsa("+86")).put("mobile", rsa(phone))
-        return call("https://passport-api.mihoyo.com/account/ma-cn-verifier/verifier/createLoginCaptcha", body, deviceId = deviceId, passport = true, aigis = aigis).getString("action_type")
+        return SmsReceipt.parse(call("https://passport-api.mihoyo.com/account/ma-cn-verifier/verifier/createLoginCaptcha", body, deviceId = deviceId, passport = true, aigis = aigis))
     }
     suspend fun loginSms(phone: String, captcha: String, action: String, deviceId: String, aigis: String = ""): Session {
         val body = JSONObject().put("area_code", rsa("+86")).put("mobile", rsa(phone)).put("captcha", captcha).put("action_type", action)

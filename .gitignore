@@ -29,7 +29,6 @@ research/
 IMPLEMENTATION_STATUS.md
 REQUIREMENTS.md
 design-system/assets/
-app/src/main/res/drawable-nodpi/yunjian_icon.webp
 app/src/androidTest/java/io/github/miyouchat/*AcceptanceTest.kt
 app/src/androidTest/java/io/github/miyouchat/DevicePreview.kt
 app/src/androidTest/java/io/github/miyouchat/MediaDiagnosticsTest.kt

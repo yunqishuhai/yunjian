@@ -24,6 +24,7 @@ import java.io.IOException
 class ApiFailure(val code: Int, val challenge: String? = null, serverMessage: String = "", operation: String = "") : Exception(when (code) {
     -100, 10001 -> "登录状态已失效，请重新登录"
     -3101, 1028, 1034 -> "需要完成安全验证，请重试或使用扫码登录"
+    -3102 -> "安全验证未通过，请重新获取验证码并完成验证"
     -3501 -> "二维码已过期，请刷新"
     else -> (if (operation.isNotBlank()) "$operation：" else "") +
         serverMessage.filter { !it.isISOControl() }.trim().take(160).ifBlank { "请求未成功" } + "（$code）"

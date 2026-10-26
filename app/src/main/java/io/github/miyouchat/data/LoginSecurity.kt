@@ -38,6 +38,7 @@ class LoginChallenge private constructor(val session: String, val version: Int, 
                 val id = data.optString("captcha_id").ifBlank { data.getString("gt") }
                 require(id.matches(Regex("[A-Za-z0-9_-]{1,128}")))
                 options.put("captchaId", id).put("language", "zho").put("protocol", "https://")
+                    .put("userInfo", JSONObject().put("session_id", session).toString())
                 data.optString("risk_type").takeIf { it.isNotBlank() }?.let { risk ->
                     require(risk.matches(Regex("[A-Za-z0-9_-]{1,64}")))
                     options.put("riskType", risk)

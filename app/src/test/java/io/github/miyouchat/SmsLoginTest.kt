@@ -38,6 +38,7 @@ class SmsLoginTest {
         assertEquals(4, challenge.version)
         assertEquals("fixturecaptcha", JSONObject(challenge.options).getString("captchaId"))
         assertEquals("slide", JSONObject(challenge.options).getString("riskType"))
+        assertEquals("fixture-session", JSONObject(JSONObject(challenge.options).getString("userInfo")).getString("session_id"))
         val result = """{"captcha_id":"fixturecaptcha","lot_number":"lot","pass_token":"pass","gen_time":"1234","captcha_output":"output"}"""
         val header = challenge.header(result)
         assertEquals(5, JSONObject(String(Base64.getDecoder().decode(header.substringAfter(';')))).length())

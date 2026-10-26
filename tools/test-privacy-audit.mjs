@@ -70,3 +70,8 @@ test('malformed private JSON cannot echo credential contents into error logs', (
     assert.ok(!result.stdout.includes(f.token)); assert.ok(!result.stderr.includes(f.token));
   }
 });
+test('GitHub web commit service email is public metadata, not a personal mailbox', () => {
+  const f = fixture(); f.run('config','user.email','noreply@github.com');
+  f.stage('README.md','Public source'); f.run('commit','-m','Synthetic web commit');
+  assert.equal(f.audit('audit-public-source.mjs',['--history']).status,0);
+});

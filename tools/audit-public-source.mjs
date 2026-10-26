@@ -60,6 +60,7 @@ function inspect(file, data, revision) {
   for (const match of text.matchAll(email)) {
     if (file.endsWith('.kt') && /^this@[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/.test(match[0])) continue;
     if (match[0] === 'user@github.com') continue; // Synthetic URL-userinfo rejection fixture.
+    if (match[0].toLowerCase() === 'noreply@github.com') continue; // GitHub web commit service identity.
     const domain = match[0].split('@')[1].toLowerCase();
     if (!/^(?:example\.(?:com|org|net)|.*\.(?:test|invalid))$/.test(domain)) addFinding('personal-email', file, revision, text.slice(0, match.index).split('\n').length);
   }
@@ -75,7 +76,7 @@ if (args.includes('--history')) {
   }
   const identities = run(['log', '--all', '--format=%ae%n%ce']).toString().trim().split('\n').filter(Boolean);
   for (const identity of new Set(identities)) {
-    if (!/^(?:.*@(?:users\.noreply\.github\.com|example\.(?:com|org|net)|[A-Za-z0-9.-]+\.(?:invalid|test))|codex@local)$/i.test(identity)) addFinding('personal-commit-email', '(commit metadata)', 'history');
+    if (!/^(?:.*@(?:users\.noreply\.github\.com|example\.(?:com|org|net)|[A-Za-z0-9.-]+\.(?:invalid|test))|noreply@github\.com|codex@local)$/i.test(identity)) addFinding('personal-commit-email', '(commit metadata)', 'history');
   }
 } else {
   const files = run(['ls-files', '-z']).toString().split('\0').filter(Boolean);

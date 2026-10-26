@@ -1,0 +1,65 @@
+# Account credentials, device keys, local caches, and future build output
+.local/
+research/local/
+local.properties
+signing.properties
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.har
+*.sqlite
+*.sqlite3
+*.db
+*.log
+.env
+.env.*
+!.env.example
+.gradle/
+**/build/
+__pycache__/
+*.pyc
+.idea/
+.kotlin/
+*.iml
+artifacts/
+
+# Private development evidence and local custom artwork are retained locally only.
+research/
+IMPLEMENTATION_STATUS.md
+REQUIREMENTS.md
+design-system/assets/
+app/src/main/res/drawable-nodpi/yunjian_icon.webp
+app/src/androidTest/java/io/github/miyouchat/*AcceptanceTest.kt
+app/src/androidTest/java/io/github/miyouchat/DevicePreview.kt
+app/src/androidTest/java/io/github/miyouchat/MediaDiagnosticsTest.kt
+app/src/androidTest/java/io/github/miyouchat/NotificationRoutingTest.kt
+tools/acquire-public-artifact.mjs
+tools/android-analysis-session.mjs
+tools/chat-send-once.mjs
+tools/download-build-tools.mjs
+tools/login-qr.mjs
+tools/package-app-icon.py
+tools/probe-chat-readonly.mjs
+tools/render-login-qr.py
+tools/validate-chat-history.mjs
+tools/verify-temporary-image.mjs
+
+# Official packages and downloaded publication assets are investigation inputs.
+# Keep findings/provenance in source control, not third-party package contents.
+research/apk/*.apk
+research/apk/*.html
+research/apk/*.js
+research/apk/package-evidence*.json
+research/apk/evidence/
+research/web-im/*.js
+research/web-im/*.html
+research/web-im/chunks/
+research/web-im/rea-evidence.json
+
+# Third-party auth source snapshots are local research inputs only.
+research/login/*.py
+research/login/*.kt
+research/login/*-tree.json
+research/login/genshin-docs_*.md
+

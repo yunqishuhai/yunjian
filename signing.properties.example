@@ -1,0 +1,5 @@
+# Copy to signing.properties (ignored); never commit the actual signing file or key.
+storeFile=.local/signing/yunjian-release.p12
+storePassword=
+keyAlias=yunjian
+keyPassword=

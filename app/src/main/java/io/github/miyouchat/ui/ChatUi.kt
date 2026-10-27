@@ -74,6 +74,7 @@ import java.util.Locale
 @Composable fun MiyouChatApp(model: ChatViewModel, destination: io.github.miyouchat.ChatDestination?, consumed: () -> Unit) {
     val updater: AppUpdateViewModel = viewModel()
     val state by model.state.collectAsState()
+    val appearance by model.appearance.collectAsState()
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     fun openSettings() { scope.launch { drawer.open() } }
@@ -81,6 +82,8 @@ import java.util.Locale
     var accounts by rememberSaveable { mutableStateOf(false) }
     var backgrounds by rememberSaveable(state.accountId) { mutableStateOf(false) }
     var updates by rememberSaveable { mutableStateOf(false) }
+    var themes by rememberSaveable { mutableStateOf(false) }
+    var mediaMenu by remember { mutableStateOf(false) }
     val snack = remember { SnackbarHostState() }
     val context = LocalContext.current
     LaunchedEffect(state.loggedIn) { if (!state.loggedIn) drawer.close() }
@@ -101,13 +104,14 @@ import java.util.Locale
             model.open(it); consumed()
         }
     }
-    YunjianTheme {
+    YunjianTheme(appearance) {
         ModalNavigationDrawer(drawerState = drawer,gesturesEnabled = state.loggedIn && (state.active == null || drawer.isOpen),drawerContent = {
             ModalDrawerSheet(Modifier.fillMaxHeight().width((LocalConfiguration.current.screenWidthDp.dp - 48.dp).coerceIn(240.dp,360.dp)),drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 if (state.loggedIn) SettingsContent(state,model,
                     manageAccounts = { closeSettings { accounts = true } },
                     export = { closeSettings { model.openArchive() } },
                     updates = { closeSettings { updates = true } },
+                    appearance = { closeSettings { themes = true } },
                     background = { closeSettings { model.clearBackgroundError(); backgrounds = true } },close = { closeSettings() })
             }
         }) {
@@ -135,7 +139,7 @@ import java.util.Locale
                                     .togetherWith(fadeOut(tween(YunjianMotion.FEEDBACK)) + slideOutHorizontally(tween(YunjianMotion.PAGE,easing = FastOutSlowInEasing)) { -it / 20 * direction })
                             }) { screen -> when {
                                 !screen.loggedIn -> LoginScreen(screen,model) { accounts = true }
-                                screen.active != null -> Conversation(screen,model)
+                                screen.active != null -> Conversation(screen,model) { mediaMenu = true }
                                 else -> ChatList(screen,model,::openSettings)
                             } }
                     }
@@ -152,6 +156,8 @@ import java.util.Locale
         }
         if (accounts) AccountSheet(state,model) { accounts = false }
         if (updates) UpdateScreen(updater) { updates = false }
+        if (themes) AppearanceScreen(appearance, model::setAppearance) { themes = false }
+        ChatMediaPicker(state, model, mediaMenu) { mediaMenu = false }
         key(state.accountId) {
             if (state.history.visible && state.loggedIn) HistoryScreen(state,model)
             if (state.archive.visible && state.loggedIn) ArchiveScreen(state,model)
@@ -271,13 +277,12 @@ import java.util.Locale
     }
 }
 
-@Composable private fun Conversation(state: AppState, model: ChatViewModel) {
+@Composable private fun Conversation(state: AppState, model: ChatViewModel, chooseImage: () -> Unit) {
     val chat = state.active ?: return
     val self = state.accounts.firstOrNull { it.id == state.accountId }
     val background = state.backgrounds.image(chat.id)
     var draft by rememberSaveable(chat.id) { mutableStateOf("") }
     var emoji by remember { mutableStateOf(false) }
-    var selectedImage by remember { mutableStateOf<Uri?>(null) }
     var previewImage by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
     val showLatest by remember { derivedStateOf { list.firstVisibleItemIndex > 3 } }
@@ -285,7 +290,6 @@ import java.util.Locale
     val sendInteraction = remember { MutableInteractionSource() }
     val sendPressed by sendInteraction.collectIsPressedAsState()
     val sendScale = animateFloatAsState(if (sendPressed) 0.94f else 1f,tween(YunjianMotion.FEEDBACK),label = "发送按压")
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selectedImage = it }
     fun sendDraft() { val value = draft; if (value.isNotBlank() && !state.busy) { model.send(value); draft = "" } }
     LaunchedEffect(state.messages.lastOrNull()?.key) {
         if (state.focusMessage == null && list.firstVisibleItemIndex < 3) list.animateScrollToItem(0)
@@ -329,7 +333,7 @@ import java.util.Locale
         }
         Surface(color = MaterialTheme.colorScheme.surface) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp,vertical = 8.dp),verticalAlignment = Alignment.Bottom,horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !state.busy) { Icon(Icons.Outlined.AddPhotoAlternate, "发送图片") }
+                IconButton(onClick = chooseImage, enabled = !state.busy) { Icon(Icons.Outlined.AddPhotoAlternate, "图片与拍照") }
                 TextField(draft,{ draft = it },Modifier.weight(1f).heightIn(min = 52.dp,max = 160.dp),placeholder = { Text("发送消息",style = MaterialTheme.typography.bodyMedium) },
                     shape = RoundedCornerShape(18.dp),maxLines = 5,keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),keyboardActions = KeyboardActions(onSend = { sendDraft() }),
                     trailingIcon = { IconButton(onClick = { emoji = true; model.loadEmoticons() },enabled = !state.busy) { Icon(Icons.Outlined.SentimentSatisfiedAlt,"表情与收藏") } },
@@ -341,9 +345,6 @@ import java.util.Locale
         }
     }
     if (emoji) EmoticonSheet(state, model) { emoji = false }
-    selectedImage?.let { uri -> AlertDialog(onDismissRequest = { selectedImage = null }, title = { Text("发送这张图片？") },
-        text = { Column { AsyncImage(uri, "待发送图片", Modifier.fillMaxWidth().heightIn(max = 280.dp)); Text("图片会作为临时自定义表情上传。审核中会显示提示，审核通过后继续发送；确认送达后清理本次新增的临时表情。", Modifier.padding(top = 12.dp), fontSize = 13.sp) } },
-        confirmButton = { TextButton(onClick = { model.sendImage(uri); selectedImage = null }) { Text("发送") } }, dismissButton = { TextButton(onClick = { selectedImage = null }) { Text("取消") } }) }
     previewImage?.let { url -> ImagePreview(url) { previewImage = null } }
 }
 
@@ -409,7 +410,7 @@ private fun startsTimeGroup(previous: Message?, message: Message): Boolean {
     }
 }
 
-@Composable private fun SettingsContent(state: AppState, model: ChatViewModel, manageAccounts: () -> Unit, export: () -> Unit, background: () -> Unit, updates: () -> Unit, close: () -> Unit) {
+@Composable private fun SettingsContent(state: AppState, model: ChatViewModel, manageAccounts: () -> Unit, export: () -> Unit, background: () -> Unit, updates: () -> Unit, appearance: () -> Unit, close: () -> Unit) {
     val context = LocalContext.current
     var logout by remember { mutableStateOf(false) }
     var clearCache by remember { mutableStateOf(false) }
@@ -438,6 +439,7 @@ private fun startsTimeGroup(previous: Message?, message: Message): Boolean {
             NavigationDrawerItem(label = { Text("切换／添加账号") },selected = false,onClick = { if (!state.busy) manageAccounts() },modifier = actionState,icon = { Icon(Icons.Outlined.ManageAccounts,null) })
             NavigationDrawerItem(label = { Text("导出聊天记录") },selected = false,onClick = { if (!state.busy) export() },modifier = actionState,icon = { Icon(Icons.Outlined.FileDownload,null) })
             NavigationDrawerItem(label = { Text("聊天背景") },selected = false,onClick = background,icon = { Icon(Icons.Outlined.Wallpaper,null) })
+            NavigationDrawerItem(label = { Text("外观主题") },selected = false,onClick = appearance,icon = { Icon(Icons.Outlined.Palette,null) })
             NavigationDrawerItem(label = { Text("检查更新") },selected = false,onClick = updates,icon = { Icon(Icons.Outlined.SystemUpdate,null) })
             HorizontalDivider(Modifier.padding(vertical = 8.dp),color = MaterialTheme.colorScheme.outlineVariant)
             Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {

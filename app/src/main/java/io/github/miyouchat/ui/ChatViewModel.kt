@@ -35,6 +35,9 @@ data class AppState(val loggedIn: Boolean = false, val chats: List<Chat> = empty
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val repository = (application as MiyouApplication).repository
+    private val appearanceStore = AppearanceStore(application)
+    val appearance = appearanceStore.state
+    fun setAppearance(value: Appearance) { appearanceStore.set(value) }
     private val library = EmoticonLibrary(application)
     private val backgroundStore = ChatBackgroundStore(application)
     private var backgroundRevision = 0L
@@ -350,10 +353,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }.getOrElse { if (cached.isEmpty()) throw it }
         }
     }
-    fun sendImage(uri: Uri) = work {
-        val chat = mutable.value.active ?: return@work
-        val (bytes, width, height) = readImage(uri)
-        repository.sendTemporaryImage(chat.id, bytes, width, height)
+    fun sendImage(uri: Uri, expectedAccount: String = accountId, expectedChat: String = mutable.value.active?.id.orEmpty(), captured: Boolean = false): Job {
+        val job = work {
+            if (expectedAccount.isBlank() || accountId != expectedAccount || mutable.value.active?.id != expectedChat) {
+                mutable.update { it.copy(error = "会话已改变，请重新选择图片") }
+                return@work
+            }
+            val (bytes, width, height) = readImage(uri)
+            repository.sendTemporaryImage(expectedChat, bytes, width, height)
+        }
+        if (captured) job.invokeOnCompletion { CameraCaptureStore(getApplication()).discard(uri) }
+        return job
     }
     private suspend fun readImage(uri: Uri): Triple<ByteArray, Int, Int> = withContext(Dispatchers.IO) {
             val resolver = getApplication<Application>().contentResolver
